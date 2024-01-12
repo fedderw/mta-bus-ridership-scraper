@@ -81,7 +81,7 @@ def save_data(rides, output_file, format="csv"):
 
 
 @task
-def upload_to_s3(file_to_upload, s3_output_filename=None,s3_bucket=None):
+def upload_to_s3(file_to_upload, s3_output_filename=None, s3_bucket=None):
     # Check if input file exists
     if not file_to_upload.exists():
         print("Input file does not exist")
@@ -141,8 +141,8 @@ def data_transform(
     node_script_path="node/index.js",
     input_path="data/raw/mta_bus_ridership.csv",
     output_path="data/processed/mta_bus_ridership.csv",
-    s3_output_filename = None,
-    s3_bucket = None,
+    s3_output_filename=None,
+    s3_bucket=None,
 ):
     # Check for directories
     check_for_directories()
@@ -156,13 +156,33 @@ def data_transform(
     if s3_output_filename and s3_bucket:
         upload_to_s3(output_path, s3_output_filename, s3_bucket)
 
+
 # Main function to parse arguments and run the flow
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Data Transformation CLI Tool")
-    parser.add_argument("--node_script_path", default="node/index.js", type=str, help="Path to Node.js script")
-    parser.add_argument("--input_path", default="data/raw/mta_bus_ridership.csv", type=str, help="Path to input data file")
-    parser.add_argument("--output_path", default="data/processed/mta_bus_ridership.csv", type=str, help="Path to output data file")
-    parser.add_argument("--s3_output_filename", type=str, help="S3 output filename")
+    parser = argparse.ArgumentParser(
+        description="Data Transformation CLI Tool"
+    )
+    parser.add_argument(
+        "--node_script_path",
+        default="node/index.js",
+        type=str,
+        help="Path to Node.js script",
+    )
+    parser.add_argument(
+        "--input_path",
+        default="data/raw/mta_bus_ridership.csv",
+        type=str,
+        help="Path to input data file",
+    )
+    parser.add_argument(
+        "--output_path",
+        default="data/processed/mta_bus_ridership.csv",
+        type=str,
+        help="Path to output data file",
+    )
+    parser.add_argument(
+        "--s3_output_filename", type=str, help="S3 output filename"
+    )
     parser.add_argument("--s3_bucket", type=str, help="S3 bucket name")
     args = parser.parse_args()
 
@@ -171,5 +191,5 @@ if __name__ == "__main__":
         input_path=Path(args.input_path),
         output_path=Path(args.output_path),
         s3_output_filename=args.s3_output_filename,
-        s3_bucket=args.s3_bucket
+        s3_bucket=args.s3_bucket,
     )
