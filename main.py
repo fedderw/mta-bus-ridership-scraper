@@ -1,9 +1,11 @@
+import argparse
 import calendar
 import datetime as dt
 import re
 import subprocess
 from pathlib import Path
 
+import boto3
 import pandas as pd
 from prefect import task
 from prefect.flows import Flow
@@ -20,9 +22,9 @@ def load_data(input_file):
     if not input_file.exists():
         print("Input file does not exist")
         return False
-    rides = pd.read_csv(input_file)
-    rides = clean_column_names(rides)
-    return rides
+    ridership = pd.read_csv(input_file)
+    ridership = clean_column_names(ridership)
+    return ridership
 
 
 def process_routes(served_routes):
@@ -37,20 +39,6 @@ def process_routes(served_routes):
     ]
     # Join the routes back together
     return ", ".join(modified_routes)
-    # Join the routes back together
-    return ", ".join(modified_routes)
-
-
-def get_business_days(date):
-    # Get the first day of the month
-    first_day = dt.datetime(date.year, date.month, 1)
-    # Get the last day of the month
-    last_day = dt.datetime(
-        date.year, date.month, calendar.monthrange(date.year, date.month)[1]
-    )
-    # Get the number of business days in the month
-    business_days = pd.bdate_range(first_day, last_day).shape[0]
-    return business_days
 
 
 def get_num_days_in_month(date):
@@ -72,30 +60,45 @@ def process_data(rides):
     rides = rides.groupby(["route", "date", "date_end"]).sum().reset_index()
     # Drop rows where ridership is 0
     rides = rides[rides["ridership"] > 0]
-    # Calculate business days in the month
-    rides["business_days"] = rides["date"].apply(get_business_days)
-    # Normalize the ridership by the number of business days in the month
-    rides["ridership_weekday"] = rides["ridership"] / rides["business_days"]
     # Get number of days in the month
     rides["num_days_in_month"] = rides["date"].apply(get_num_days_in_month)
     # Get ridership per day
     rides["ridership_per_day"] = (
         rides["ridership"] / rides["num_days_in_month"]
     )
-    # Calculate change vs. previous years
-    for i in range(1, 4):
-        rides[f"change_vs_{i}_years_ago"] = (
-            rides["ridership"]
-            / rides.groupby("route")["ridership"].shift(i * 12)
-            - 1
-        )
+
     return rides
 
 
 @task
-def save_data(rides, output_file):
-    # Save the cleaned data to a new CSV file
-    rides.to_csv(output_file, index=False)
+def save_data(rides, output_file, format="csv"):
+    if format == "csv":
+        # Save the cleaned data to a new CSV file
+        rides.to_csv(output_file, index=False)
+    if format == "parquet":
+        # Save the cleaned data to a new Parquet file
+        rides.to_parquet(output_file, index=False)
+
+
+@task
+def upload_to_s3(file_to_upload, s3_output_filename=None,s3_bucket=None):
+    # Check if input file exists
+    if not file_to_upload.exists():
+        print("Input file does not exist")
+        return False
+
+    ridership = pd.read_csv(file_to_upload)
+
+    # Convert DataFrame to parquet
+    parquet_file = s3_output_filename
+    ridership.to_parquet(parquet_file)
+
+    # Initialize the S3 client
+    s3 = boto3.client("s3")
+
+    # Upload the parquet file to S3
+    with open(parquet_file, "rb") as data:
+        s3.upload_fileobj(data, s3_bucket, parquet_file)
 
 
 @task
@@ -135,9 +138,11 @@ def check_for_directories():
 # Define the Flow
 @Flow
 def data_transform(
-    node_script_path,
-    input_path,
-    output_path,
+    node_script_path="node/index.js",
+    input_path="data/raw/mta_bus_ridership.csv",
+    output_path="data/processed/mta_bus_ridership.csv",
+    s3_output_filename = None,
+    s3_bucket = None,
 ):
     # Check for directories
     check_for_directories()
@@ -148,16 +153,23 @@ def data_transform(
     data = load_data(input_path)
     processed_data = process_data(data)
     save_data(processed_data, output_path)
+    if s3_output_filename and s3_bucket:
+        upload_to_s3(output_path, s3_output_filename, s3_bucket)
 
-
+# Main function to parse arguments and run the flow
 if __name__ == "__main__":
-    # Run the Flow
-    node_script_path = Path("node/index.js")
+    parser = argparse.ArgumentParser(description="Data Transformation CLI Tool")
+    parser.add_argument("--node_script_path", default="node/index.js", type=str, help="Path to Node.js script")
+    parser.add_argument("--input_path", default="data/raw/mta_bus_ridership.csv", type=str, help="Path to input data file")
+    parser.add_argument("--output_path", default="data/processed/mta_bus_ridership.csv", type=str, help="Path to output data file")
+    parser.add_argument("--s3_output_filename", type=str, help="S3 output filename")
+    parser.add_argument("--s3_bucket", type=str, help="S3 bucket name")
+    args = parser.parse_args()
 
-    input_path = Path("data/raw/mta_bus_ridership.csv")
-    output_path = Path("data/processed/mta_bus_ridership.csv")
     data_transform(
-        node_script_path=node_script_path,
-        input_path=input_path,
-        output_path=output_path,
+        node_script_path=Path(args.node_script_path),
+        input_path=Path(args.input_path),
+        output_path=Path(args.output_path),
+        s3_output_filename=args.s3_output_filename,
+        s3_bucket=args.s3_bucket
     )
