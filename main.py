@@ -8,7 +8,7 @@ from pathlib import Path
 import boto3
 import pandas as pd
 from prefect import task
-from prefect.flows import Flow
+from prefect.flows import flow
 
 
 def clean_column_names(df):
@@ -136,7 +136,7 @@ def check_for_directories():
 
 
 # Define the Flow
-@Flow
+@flow(log_prints=True)
 def data_transform(
     node_script_path="node/index.js",
     input_path="data/raw/mta_bus_ridership.csv",
