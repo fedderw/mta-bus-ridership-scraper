@@ -14,3 +14,6 @@ run_python:
 
 format:
 	. venv/bin/activate && black . -l 79 && isort .
+
+test:
+	. venv/bin/activate && python -m pytest tests/

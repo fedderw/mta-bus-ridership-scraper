@@ -3,4 +3,4 @@ pandas==2.1.4
 prefect==2.14.12
 pyarrow
 fastparquet
-
+pytest
