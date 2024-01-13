@@ -102,7 +102,7 @@ def upload_to_s3(file_to_upload, s3_output_filename=None, s3_bucket=None):
 
 
 @task
-def run_node_script(script_path):
+def run_node_script(script_path, scraped_data_path):
     # Check if Node.js script exists
     if not script_path.exists():
         print("Node.js script does not exist")
@@ -115,7 +115,7 @@ def run_node_script(script_path):
         return False
 
     try:
-        subprocess.run(["node", script_path], check=True)
+        subprocess.run(["node", script_path, scraped_data_path], check=True)
     except Exception as e:
         print(f"Failed to run Node.js script: {e}")
         return False
@@ -147,7 +147,7 @@ def data_transform(
     # Check for directories
     check_for_directories()
     # Run Node.js script
-    run_node_script(node_script_path)
+    run_node_script(node_script_path,input_path)
 
     # Run data transformation tasks
     data = load_data(input_path)
